@@ -117,3 +117,39 @@ This document serves as the official data dictionary and reference guide for the
 
 ---
 
+### D. Ticket Marketplace Integration (New for Simulator)
+* **Granularity / Grain**: Forward-looking 2026 ticket pricing events.
+
+| Table Name | Description |
+| :--- | :--- |
+| **`team_lookup`** | Maps full display names (e.g. "Boston Red Sox") to `team_id` (`BOS`). Used for event parsing. |
+| **`venue_map`** | Maps Gametime (`gt_venue_id`) and SeatGeek (`sg_venue_id`) internal venue IDs to historical `park_id`s. |
+| **`gametime_events`** | 2026 ticket pricing from Gametime. Includes `min_price`, `max_price`, and `trending_score`. |
+| **`seatgeek_events`** | 2026 ticket pricing from SeatGeek. Includes `lowest_price`, `highest_price`, `avg_price`, `listing_count`, and `ticket_count`. |
+
+> [!WARNING]
+> **Currency Units in Raw Data**:
+> Gametime raw data stores prices in **cents** (e.g., 5261 = $52.61), while SeatGeek raw data stores prices in standard **dollars** (e.g., 166 = $166.00). If you query the raw tables directly, be sure to divide Gametime prices by 100! (The `v_ticket_pricing` view handles this automatically).
+
+---
+
+### E. Analytical Views (The Simulator Engine)
+
+| View Name | Description |
+| :--- | :--- |
+| **`v_ticket_pricing`** | Unified view combining `gametime_events` and `seatgeek_events` into a single, standardized pricing pool (`floor_price`, `ceiling_price`, `avg_price`). |
+| **`v_team_attendance_stats`** | Pre-aggregated season-by-season attendance averages, minimums, and maximums per team. |
+| **`v_matchup_history`** | Historical attendance aggregated for every unique home-vs-visitor team pairing. |
+| **`v_day_of_week_effects`** | Calculates how each day of the week impacts attendance relative to a team's baseline average (e.g. Saturday = +2,000 fans). |
+| **`v_weather_impact`** | Calculates how combinations of sky, precipitation, and temperature buckets shift attendance relative to baseline. |
+
+---
+
+### F. Performance Indexes
+
+The following composite indexes were added to support the simulator's complex, multi-factor queries and dramatically improve read performance:
+* `idx_games_team_dow`: `games(home_team_id, day_of_week)`
+* `idx_games_team_daynight`: `games(home_team_id, daynight)`
+* `idx_games_team_weather`: `games(home_team_id, sky, precip)`
+* `idx_gt_team_matchup`: `gametime_events(home_team_id, vis_team_id)`
+* `idx_sg_team_matchup`: `seatgeek_events(home_team_id, vis_team_id)`

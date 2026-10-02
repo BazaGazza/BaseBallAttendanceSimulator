@@ -1,14 +1,13 @@
 """
-[PROTOTYPE] queries.py — Analytical SQL queries against the baseball attendance database.
+queries.py - sql queries for the baseball database
 
-Provides a library of reusable queries for exploring attendance patterns,
-park factors, and environmental impacts. Each function connects to the DB,
-runs a query, and returns a pandas DataFrame.
+this file has all the queries we need to figure out attendance patterns.
+it connects to the db and gives back pandas dataframes.
 
-Usage:
+how to use it:
     from queries import AttendanceAnalyzer
-    qa = AttendanceAnalyzer()       # defaults to baseball_attendance.db
-    qa.attendance_by_team()         # → DataFrame
+    qa = AttendanceAnalyzer()       # uses baseball_attendance.db
+    qa.attendance_by_team()
 """
 
 import os
@@ -21,7 +20,7 @@ DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class AttendanceAnalyzer:
-    """Run pre-built analytical queries against the baseball SQLite DB."""
+    """run queries against the baseball db"""
 
     def __init__(self, db_path: str | None = None):
         self.db_path = db_path or os.path.join(DATA_DIR, DB_NAME)
@@ -32,15 +31,20 @@ class AttendanceAnalyzer:
             )
 
     def _query(self, sql: str, params: tuple = ()) -> pd.DataFrame:
-        """Execute a query and return a DataFrame."""
+        """run a query and get a dataframe back"""
         with sqlite3.connect(self.db_path) as conn:
             return pd.read_sql_query(sql, conn, params=params)
 
+    def get_valid_teams(self) -> list:
+        """get a list of all valid team ids"""
+        df = self._query("SELECT team_id FROM teams")
+        return df['team_id'].tolist()
+
     # ------------------------------------------------------------------
-    # 1. Attendance by team (all-time & season-level)
+    # 1. attendance by team 
     # ------------------------------------------------------------------
     def attendance_by_team(self, season: int | None = None) -> pd.DataFrame:
-        """Average and total attendance per home team, optionally for a season."""
+        """get average and total attendance for each home team"""
         where = "WHERE g.gametype = 'regular'"
         params: tuple = ()
         if season:
@@ -65,10 +69,10 @@ class AttendanceAnalyzer:
         return self._query(sql, params)
 
     # ------------------------------------------------------------------
-    # 2. Day-of-week attendance patterns
+    # 2. attendance based on the day of the week
     # ------------------------------------------------------------------
     def attendance_by_day_of_week(self) -> pd.DataFrame:
-        """Average attendance broken down by day of the week."""
+        """see how attendance changes depending on the day of the week"""
         sql = """
         SELECT
             day_of_week,
@@ -84,10 +88,10 @@ class AttendanceAnalyzer:
         return self._query(sql)
 
     # ------------------------------------------------------------------
-    # 3. Day vs Night attendance
+    # 3. day games vs night games
     # ------------------------------------------------------------------
     def attendance_day_vs_night(self) -> pd.DataFrame:
-        """Compare day-game vs night-game attendance."""
+        """compare attendance for day and night games"""
         sql = """
         SELECT
             daynight,
@@ -103,10 +107,10 @@ class AttendanceAnalyzer:
         return self._query(sql)
 
     # ------------------------------------------------------------------
-    # 4. Weather impact on attendance
+    # 4. weather impact
     # ------------------------------------------------------------------
     def attendance_by_weather(self) -> pd.DataFrame:
-        """Average attendance grouped by sky condition and precipitation."""
+        """see how weather affects the attendance"""
         sql = """
         SELECT
             sky,
@@ -124,10 +128,10 @@ class AttendanceAnalyzer:
         return self._query(sql)
 
     # ------------------------------------------------------------------
-    # 5. Temperature bins and attendance
+    # 5. temperature and attendance
     # ------------------------------------------------------------------
     def attendance_by_temp_range(self) -> pd.DataFrame:
-        """Bucket temperatures into ranges and show attendance patterns."""
+        """group temperatures to see if it changes attendance"""
         sql = """
         SELECT
             CASE
@@ -152,14 +156,14 @@ class AttendanceAnalyzer:
         return self._query(sql)
 
     # ------------------------------------------------------------------
-    # 6. Park Run Factor (ballpark effects on scoring)
+    # 6. park run factor
     # ------------------------------------------------------------------
     def park_run_factors(self, min_games: int = 50) -> pd.DataFrame:
         """
-        Calculate a simple Run Park Factor per venue.
+        calculate a simple run park factor for each stadium.
 
-        Park Factor = (avg runs at park) / (league avg runs) * 100
-        Values > 100 → hitter-friendly; < 100 → pitcher-friendly.
+        park factor = (avg runs at park) / (league avg runs) * 100
+        > 100 means hitter friendly, < 100 means pitcher friendly
         """
         sql = f"""
         WITH league_avg AS (
@@ -197,10 +201,10 @@ class AttendanceAnalyzer:
         return self._query(sql, (min_games,))
 
     # ------------------------------------------------------------------
-    # 7. Season-over-season attendance trend
+    # 7. season over season attendance trend
     # ------------------------------------------------------------------
     def attendance_trend(self) -> pd.DataFrame:
-        """League-wide average attendance per season."""
+        """get average attendance across the whole league per season"""
         sql = """
         SELECT
             season,
@@ -216,10 +220,10 @@ class AttendanceAnalyzer:
         return self._query(sql)
 
     # ------------------------------------------------------------------
-    # 8. Top rivalry matchups by attendance
+    # 8. top rivalry matchups
     # ------------------------------------------------------------------
     def top_matchups(self, top_n: int = 20) -> pd.DataFrame:
-        """Find the matchups (home vs visitor) that draw the biggest crowds."""
+        """find out which matchups get the biggest crowds"""
         sql = f"""
         SELECT
             home_team_id || ' vs ' || vis_team_id AS matchup,
@@ -235,6 +239,129 @@ class AttendanceAnalyzer:
         LIMIT ?
         """
         return self._query(sql, (top_n,))
+
+    # ------------------------------------------------------------------
+    # simulator queries
+    # ------------------------------------------------------------------
+    def simulate_attendance(
+        self, home_team: str, vis_team: str, day_of_week: str, daynight: str
+    ) -> pd.DataFrame:
+        """find comparable games to predict attendance"""
+        # start by looking for an exact match
+        sql = """
+        SELECT
+            COUNT(*) AS sample_size,
+            ROUND(AVG(attendance)) AS predicted_attendance,
+            MIN(attendance) AS low_estimate,
+            MAX(attendance) AS high_estimate,
+            'Exact Match' AS match_level
+        FROM games
+        WHERE home_team_id = ? AND vis_team_id = ? 
+          AND day_of_week = ? AND daynight = ?
+          AND gametype = 'regular' AND attendance IS NOT NULL
+        HAVING COUNT(*) >= 3
+        """
+        df = self._query(sql, (home_team, vis_team, day_of_week, daynight))
+        if not df.empty: return df
+        
+        # if no exact match, drop the day/night filter and try again
+        sql = """
+        SELECT
+            COUNT(*) AS sample_size,
+            ROUND(AVG(attendance)) AS predicted_attendance,
+            MIN(attendance) AS low_estimate,
+            MAX(attendance) AS high_estimate,
+            'Matchup + Day of Week' AS match_level
+        FROM games
+        WHERE home_team_id = ? AND vis_team_id = ? 
+          AND day_of_week = ?
+          AND gametype = 'regular' AND attendance IS NOT NULL
+        HAVING COUNT(*) >= 3
+        """
+        df = self._query(sql, (home_team, vis_team, day_of_week))
+        if not df.empty: return df
+
+        # drop the day of week too
+        sql = """
+        SELECT
+            COUNT(*) AS sample_size,
+            ROUND(AVG(attendance)) AS predicted_attendance,
+            MIN(attendance) AS low_estimate,
+            MAX(attendance) AS high_estimate,
+            'Matchup Only' AS match_level
+        FROM games
+        WHERE home_team_id = ? AND vis_team_id = ?
+          AND gametype = 'regular' AND attendance IS NOT NULL
+        HAVING COUNT(*) >= 5
+        """
+        df = self._query(sql, (home_team, vis_team))
+        if not df.empty: return df
+
+        # if all else fails, just use the home team's average
+        sql = """
+        SELECT
+            COUNT(*) AS sample_size,
+            ROUND(AVG(attendance)) AS predicted_attendance,
+            MIN(attendance) AS low_estimate,
+            MAX(attendance) AS high_estimate,
+            'Team Baseline' AS match_level
+        FROM games
+        WHERE home_team_id = ?
+          AND gametype = 'regular' AND attendance IS NOT NULL
+        """
+        return self._query(sql, (home_team,))
+
+    def factor_impacts(self, home_team: str, day_of_week: str, sky: str = None, precip: str = None, temp: int = None) -> pd.DataFrame:
+        """calculate how weather and day of the week change the attendance"""
+        factors = []
+        
+        # figure out the day of the week impact
+        sql_dow = "SELECT impact_vs_baseline FROM v_day_of_week_effects WHERE home_team_id = ? AND day_of_week = ?"
+        df_dow = self._query(sql_dow, (home_team, day_of_week))
+        if not df_dow.empty:
+            factors.append({'Factor': f"Day of Week ({day_of_week})", 'Impact': df_dow.iloc[0]['impact_vs_baseline']})
+
+        # figure out the weather impact (if they gave us weather info)
+        if sky and precip and temp:
+            temp_bucket = 'Cold' if temp < 60 else ('Moderate' if temp <= 85 else 'Hot')
+            sql_weather = "SELECT impact_vs_baseline FROM v_weather_impact WHERE home_team_id = ? AND sky = ? AND precip = ? AND temp_bucket = ?"
+            df_weather = self._query(sql_weather, (home_team, sky, precip, temp_bucket))
+            if not df_weather.empty:
+                factors.append({'Factor': f"Weather ({sky}, {precip}, {temp_bucket})", 'Impact': df_weather.iloc[0]['impact_vs_baseline']})
+                
+        return pd.DataFrame(factors)
+
+    def predict_ticket_prices(self, home_team: str, vis_team: str) -> pd.DataFrame:
+        """predict ticket prices using our pricing view"""
+        # try to find this exact matchup in our ticket data
+        sql = """
+        SELECT
+            ROUND(AVG(floor_price)) AS predicted_floor,
+            ROUND(AVG(ceiling_price)) AS predicted_ceiling,
+            ROUND(AVG(avg_price)) AS predicted_avg,
+            COUNT(*) AS data_points,
+            'Exact Matchup' AS match_level
+        FROM v_ticket_pricing
+        WHERE home_team_id = ? AND vis_team_id = ?
+        HAVING COUNT(*) > 0
+        """
+        df = self._query(sql, (home_team, vis_team))
+        if not df.empty and pd.notna(df.iloc[0]['predicted_floor']):
+            return df
+            
+        # if we can't find the exact matchup, just use the home team's average price
+        sql = """
+        SELECT
+            ROUND(AVG(floor_price)) AS predicted_floor,
+            ROUND(AVG(ceiling_price)) AS predicted_ceiling,
+            ROUND(AVG(avg_price)) AS predicted_avg,
+            COUNT(*) AS data_points,
+            'Team Average' AS match_level
+        FROM v_ticket_pricing
+        WHERE home_team_id = ?
+        """
+        return self._query(sql, (home_team,))
+
 
 
 # ---------------------------------------------------------------------------
