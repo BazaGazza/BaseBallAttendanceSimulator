@@ -1,7 +1,10 @@
+import os
 import sqlite3
 import time
 
-DB_PATH = 'baseball_attendance.db'
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(DATA_DIR, 'baseball_attendance.db')
+
 
 QUERIES_TO_BENCHMARK = [
     {
