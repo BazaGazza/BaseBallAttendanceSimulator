@@ -1,0 +1,56 @@
+/* Typography */
+body {
+    font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+    background-color: #272b30;
+    color: #e9ecef;
+    line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: #17a2b8;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+h1 {
+    font-size: 2.75rem;
+}
+
+h5 {
+    font-size: 2.0rem;
+    font-weight: 600;
+}
+
+/* Override Bootstrap default text colors for dark theme */
+.text-muted {
+    color: #adb5bd !important;
+}
+
+.text-success {
+    color: #28a745 !important;
+}
+
+.text-warning {
+    color: #ffc107 !important;
+}
+
+.text-blue {
+    color: #17a2b8 !important;
+}
+
+.text-info {
+    color: #17a2b8 !important;
+}
+
+.text-primary {
+    color: #20c997 !important;
+}
+
+/* Measurement & Baseball-specific text styles */
+.text-orange {
+    color: #ff8c00 !important;
+}
+
+.mb-0 {
+    margin-bottom: 0 !important;
+}
