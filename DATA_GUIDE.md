@@ -74,7 +74,7 @@ This document serves as the official data dictionary and reference guide for the
 
 | Column Name | SQL Type | Description & Domain Rules | Example Values |
 | :--- | :--- | :--- | :--- |
-| **`team_id`** *(PK)* | `VARCHAR(5)` | Retrosheet 3-letter team code. | `'BOS'`, `'NYA'`, `'LAN'`, `'CHN'` |
+| **`team_id`** *(PK)* | `VARCHAR(3)` | Retrosheet 3-letter team code. | `'BOS'`, `'NYA'`, `'LAN'`, `'CHN'` |
 
 > [!NOTE]
 > **Retrosheet Two-Team City Codes**:
