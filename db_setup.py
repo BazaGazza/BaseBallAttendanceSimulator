@@ -144,6 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_sg_event_date  ON seatgeek_events(event_date);
 CREATE INDEX IF NOT EXISTS idx_sg_park        ON seatgeek_events(park_id);
 
 -- view that puts gametime and seatgeek prices together
+-- filters out gametime rows where max_price is 0 since those mess up the averages
 CREATE VIEW IF NOT EXISTS v_ticket_pricing AS
 SELECT
     event_id,
@@ -160,6 +161,7 @@ SELECT
     NULL            AS ticket_count,
     'gametime'      AS source
 FROM gametime_events
+WHERE max_price > 0
 UNION ALL
 SELECT
     CAST(event_id AS TEXT),
@@ -451,6 +453,18 @@ def build_database(db_path: str, force: bool = False) -> None:
     games_df = _clean_nulls(pd.read_csv(CSV_FILES["games"]))
     games_df.to_sql("games", conn, if_exists="append", index=False)
     print(f"  [OK] Loaded {len(games_df):,} games")
+
+    # fix known data issues after loading
+    # 2020 games had no fans, attendance=0 drags down all our averages
+    fixed_2020 = cur.execute(
+        "UPDATE games SET attendance = NULL WHERE season = 2020 AND attendance = 0"
+    ).rowcount
+    # temp=0 is a sentinel value from retrosheet (mostly domed stadiums), not an actual temp
+    fixed_temp = cur.execute(
+        "UPDATE games SET temp = NULL WHERE temp = 0"
+    ).rowcount
+    conn.commit()
+    print(f"  [OK] Cleaned {fixed_2020} zero-attendance 2020 games, {fixed_temp} temp=0 sentinels")
 
     # ------------------------------------------------------------------
     # dump in the team lookups
