@@ -1,15 +1,197 @@
-# BaseBallAttendanceSimulator
+# Baseball Attendance Simulator
 
-Made by Jimmy Ly, Grant Trager, Kyle Kline, and Rodolfo Baza Carrillo
+Predict MLB game attendance and secondary-market ticket prices from 35 seasons of game logs, weather, and scheduling data.
 
-### Team Project Tasks and Initial Milestone
+The Baseball Attendance Simulator (BAS) combines historical Retrosheet game logs (1990–2025) with 2026 ticket listings from Gametime and SeatGeek in a single SQLite database. On top of that database it provides:
 
-**Grant:** Grant will lead the data-collection and database-development portion of the project. He will continue obtaining and cleaning the MLB data, document the available datasets and column meanings, and build the SQLite database structure with the necessary tables, primary keys, foreign keys, and relationships. Grant will also develop the initial SQL queries and views needed to retrieve information for the dashboard visuals, including attendance by stadium, attendance by day of the week, weather comparisons, matchup attendance, and scoring trends. He should commit the database setup files, data documentation, schema diagram, and sample queries to GitHub so the rest of the team can begin connecting to the database.
+- **Attendance simulator (CLI):** predicts attendance for a hypothetical game, shows how the weekday and weather move the crowd, and estimates ticket prices for the matchup.
+- **Analytics dashboard (Dash):** league-wide statistics and interactive charts.
+- **Query benchmark:** measures how much the composite indexes speed up the simulator's queries.
 
-**Jimmy:** Jimmy will initially focus on building the project’s informational blog-style website using Google Sites, Weebly, Wix, or another suitable website builder. The website should explain the purpose of the project, the real-world problem it addresses, the data sources being used, why the project is unique and useful, and how it could potentially support ticketing, marketing, or revenue decisions for sports teams. The site should include a clear project overview, team information, and space for screenshots or links to the working dashboard. Once the initial site is available, Jimmy can continue improving its design and content based on feedback and help connect the website to the project’s GitHub repository and application.
+Project website: [BazaGazza/BaseballWebsite](https://github.com/BazaGazza/BaseballWebsite)
 
-**Kyle:** Kyle will lead development of the interactive web application using Python Dash. The initial goal is to create a simple working dashboard that connects to Grant’s SQLite database and displays several useful visualizations, such as total games, number of stadiums, average attendance, average runs per game, attendance by stadium, attendance by day of the week, and attendance or scoring trends by season. The first version does not need to include every planned feature; it should provide a clean foundation with reusable database-connection code, basic filters, charts, and layout styling. Kyle will also organize the dashboard structure so that additional pages, including the Park Explorer and Matchup and Demand Explorer, can be added later.
+## Quick start
 
-**Rodolfo:** Rodolfo will support the area of the project that most interests him while collaborating with the other team members. He can assist Jimmy with website layout, design, and project content; help Kyle develop the Dash interface and pages; or help Grant review the datasets, validate the database structure, and create or test analytical queries. For the initial milestone, Rodolfo should choose one of these areas, coordinate with the appropriate team member, and complete a small deliverable such as designing a website section, creating a dashboard component, testing SQL queries, or documenting data-quality issues. His work should complement the other team members’ efforts and help ensure that the first working prototype is ready for the class presentation.
+Requires Python 3.10+.
 
-**Initial milestone:** Within the next couple of weeks, the team should aim to have a basic SQLite database, several tested SQL queries, an initial informational website, and a functioning Dash dashboard with a few meaningful visualizations. The purpose of this first milestone is to create something the team can demonstrate in class, receive feedback on, and improve throughout the remainder of the semester.
+```bash
+git clone https://github.com/BazaGazza/BaseBallAttendanceSimulator.git
+cd BaseBallAttendanceSimulator
+pip install -r requirements.txt
+python db_setup.py              # builds baseball_attendance.db from the CSVs
+python simulator.py -i          # start the simulator
+```
+
+> **Windows:** if `python` can't find pandas, you may have more than one Python installed. Use the launcher with a version, e.g. `py -3.13 db_setup.py`.
+
+## Usage
+
+### Simulator
+
+Interactive mode prompts for each value and keeps running until you press **Ctrl+C**:
+
+```bash
+python simulator.py -i
+```
+
+Or run a single prediction with arguments:
+
+```bash
+python simulator.py --home BOS --vis NYA --dow Saturday --dn day --sky sunny --precip none --temp 75
+```
+
+| Argument | Required | Values |
+| :--- | :---: | :--- |
+| `--home`, `--vis` | yes | Team code (see below) |
+| `--dow` | yes | `Monday` … `Sunday` |
+| `--dn` | yes | `day` or `night` |
+| `--sky` | no | `sunny`, `cloudy`, `overcast`, `dome` |
+| `--precip` | no | `none`, `drizzle`, `rain`, `showers`, `snow` |
+| `--temp` | no | Temperature in °F |
+
+The weather arguments are only used when all three are given.
+
+Example output:
+
+```
+1. ATTENDANCE PREDICTION
+  Predicted Attendance: 36,104
+  Expected Range:       15,250 to 51,217
+  Confidence Basis:     Exact Match (n=46)
+
+2. FACTOR IMPACT ANALYSIS
+  Day of Week (Friday)     : +2,461 fans
+
+3. SECONDARY TICKET MARKET PREDICTION
+  Predicted Floor Price:   $81.00
+  Predicted Average Price: $200.00
+  Predicted Ceiling Price: $2,207.00
+  Data Source:             Exact Matchup (n=12)
+```
+
+**Confidence Basis** shows how the prediction was made. The simulator first averages past games with the same matchup, weekday, and day/night. If there are too few of those, it widens the search in steps: matchup + weekday, then matchup only, then the home team's overall average. `n` is the number of games used.
+
+### Team codes
+
+Codes follow Retrosheet, which marks the league in two-team cities (`NYA` Yankees / `NYN` Mets, `CHA` White Sox / `CHN` Cubs).
+
+| Code | Team | Code | Team | Code | Team |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| ARI | Diamondbacks | HOU | Astros | PHI | Phillies |
+| ATL | Braves | KCA | Royals | PIT | Pirates |
+| BAL | Orioles | ANA | Angels | SDN | Padres |
+| BOS | Red Sox | LAN | Dodgers | SFN | Giants |
+| CHN | Cubs | MIA | Marlins | SEA | Mariners |
+| CHA | White Sox | MIL | Brewers | SLN | Cardinals |
+| CIN | Reds | MIN | Twins | TBA | Rays |
+| CLE | Guardians | NYN | Mets | TEX | Rangers |
+| COL | Rockies | NYA | Yankees | TOR | Blue Jays |
+| DET | Tigers | ATH | Athletics | WAS | Nationals |
+
+### Dashboard
+
+```bash
+pip install -r frontend/requirements.txt
+cd frontend/src
+python app.py
+```
+
+Then open http://localhost:8050. See [frontend/README.md](frontend/README.md) for adding pages and styling.
+
+### Benchmark
+
+```bash
+python benchmark.py
+```
+
+Times four simulator queries with and without the composite indexes, then restores the indexes. Recorded results are in [benchmark_results.md](benchmark_results.md).
+
+### Rebuilding the database
+
+`db_setup.py` won't overwrite an existing database. To rebuild after changing the CSVs:
+
+```bash
+python db_setup.py --force
+```
+
+## How it works
+
+```
+clean_*.csv ──► db_setup.py ──► baseball_attendance.db ──► queries.py ──┬─► simulator.py
+                                                                        ├─► frontend/ (Dash)
+                                                                        └─► benchmark.py
+```
+
+- **`db_setup.py`** creates the schema, loads the CSVs, and links the ticket data to the game data. Ticket sites name games in text ("Pittsburgh Pirates at New York Mets"), so a regex and a team lookup table turn those names into team codes. A venue map does the same for stadium IDs. Gametime prices are stored in cents and converted to dollars.
+- **`queries.py`** holds all the SQL in one class, `AttendanceAnalyzer`. Every method runs a parameterized query and returns a pandas DataFrame.
+- **`simulator.py`**, the **dashboard**, and **`benchmark.py`** only call `queries.py` or the database; none of them build their own SQL from user input.
+
+### Database
+
+| Table | Rows | Contents |
+| :--- | ---: | :--- |
+| `games` | 84,430 | One row per game: date, park, teams, attendance, weather, score |
+| `parks` | 672 | Every ballpark in the Retrosheet registry |
+| `teams` | 36 | Team codes, including historical franchises |
+| `team_lookup` | 30 | Full team name → team code |
+| `venue_map` | 30 | Ticket-site venue IDs → park code |
+| `gametime_events` | 2,437 | 2026 Gametime listings |
+| `seatgeek_events` | 2,285 | 2026 SeatGeek listings |
+
+Five views do the analysis: `v_ticket_pricing` (both ticket sources in one table), `v_team_attendance_stats`, `v_matchup_history`, `v_day_of_week_effects`, and `v_weather_impact`. Column definitions and data notes are in [DATA_GUIDE.md](DATA_GUIDE.md).
+
+## Project structure
+
+```
+BaseBallAttendanceSimulator/
+├── clean_*.csv            # Cleaned source data (games, parks, teams, gametime, seatgeek)
+├── db_setup.py            # Builds baseball_attendance.db
+├── queries.py             # AttendanceAnalyzer: all SQL queries
+├── simulator.py           # Command-line simulator
+├── benchmark.py           # Index performance benchmark
+├── requirements.txt
+├── frontend/              # Dash dashboard
+│   ├── requirements.txt
+│   └── src/
+│       ├── app.py
+│       ├── assets/        # CSS
+│       ├── components/    # Stat and chart cards
+│       └── pages/         # Dashboard pages
+└── docs/
+    └── technical_report/  # Technical report source (report.html) and screenshots
+```
+
+`baseball_attendance.db` is generated and not committed.
+
+## Documentation
+
+- [DATA_GUIDE.md](DATA_GUIDE.md): data dictionary, schema, and Retrosheet conventions
+- [benchmark_results.md](benchmark_results.md): query performance with and without indexes
+- [frontend/README.md](frontend/README.md): dashboard structure and how to add pages
+- [docs/technical_report/](docs/technical_report/): full technical report (design, implementation, course concepts, user guide)
+
+## Known limitations
+
+- 2020 games played without fans are stored with attendance 0, which lowers team averages slightly.
+- Night games are recorded with sky = `night`, so "sunny" weather only describes day games.
+- Some games, mostly in domes, have a temperature of 0 and are counted as "Cold".
+- Some Gametime listings report a maximum price of 0, which lowers the predicted ceiling price.
+
+## Troubleshooting
+
+| Problem | Fix |
+| :--- | :--- |
+| `No module named 'pandas'` or `'dash'` | Install the requirements for the Python you're running (`pip install -r requirements.txt`, plus `frontend/requirements.txt` for the dashboard). |
+| `Database not found` | Run `python db_setup.py` from the project root. |
+| `Database already exists` | Expected. Use `--force` only if you want to rebuild. |
+| `invalid home team` | Use the Retrosheet code, e.g. `SDN` not `SD`. |
+| `./run.sh` fails on Windows | It expects a Unix virtual environment. Use the dashboard commands above instead. |
+
+## Team
+
+CS 514 team project by:
+
+- **Grant Trager:** data collection and cleaning, database design, queries, simulator, benchmark
+- **Kyle Kline:** Dash dashboard
+- **Rodolfo Baza Carrillo:** project website
+- **Jimmy Ly:** website content, design support

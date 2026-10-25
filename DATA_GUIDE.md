@@ -74,7 +74,7 @@ This document serves as the official data dictionary and reference guide for the
 
 | Column Name | SQL Type | Description & Domain Rules | Example Values |
 | :--- | :--- | :--- | :--- |
-| **`team_id`** *(PK)* | `VARCHAR(5)` | Retrosheet 3-letter team code. | `'BOS'`, `'NYA'`, `'LAN'`, `'CHN'` |
+| **`team_id`** *(PK)* | `VARCHAR(3)` | Retrosheet 3-letter team code. | `'BOS'`, `'NYA'`, `'LAN'`, `'CHN'` |
 
 > [!NOTE]
 > **Retrosheet Two-Team City Codes**:
@@ -129,7 +129,7 @@ This document serves as the official data dictionary and reference guide for the
 
 > [!WARNING]
 > **Currency Units in Raw Data**:
-> Gametime raw data stores prices in **cents** (e.g., 5261 = $52.61), while SeatGeek raw data stores prices in standard **dollars** (e.g., 166 = $166.00). If you query the raw tables directly, be sure to divide Gametime prices by 100! (The `v_ticket_pricing` view handles this automatically).
+> Gametime raw data stores prices in **cents** (e.g., 5261 = $52.61), while SeatGeek raw data stores prices in standard **dollars** (e.g., 166 = $166.00)
 
 ---
 
