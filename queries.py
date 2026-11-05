@@ -362,7 +362,47 @@ class AttendanceAnalyzer:
         """
         return self._query(sql, (home_team,))
 
+    def get_park_capacity(
+        self, park_id: str | None = None, home_team: str | None = None
+    ) -> int | None:
+        """Look up seating capacity by park_id or home_team_id."""
+        if park_id:
+            df = self._query(
+                "SELECT seating_capacity FROM park_capacity WHERE park_id = ?",
+                (park_id,),
+            )
+            if not df.empty:
+                return int(df.iloc[0]["seating_capacity"])
 
+        if home_team:
+            # Find the primary/most recent park for this home team that has capacity data
+            sql = """
+            SELECT pc.seating_capacity
+            FROM games g
+            JOIN park_capacity pc ON g.park_id = pc.park_id
+            WHERE g.home_team_id = ?
+            ORDER BY g.game_date DESC
+            LIMIT 1
+            """
+            df = self._query(sql, (home_team,))
+            if not df.empty:
+                return int(df.iloc[0]["seating_capacity"])
+        return None
+
+    def get_park_id(self, home_team: str) -> str | None:
+        """Get the primary park_id for a given home_team_id."""
+        sql = """
+        SELECT park_id
+        FROM games
+        WHERE home_team_id = ? AND park_id IS NOT NULL
+        GROUP BY park_id
+        ORDER BY MAX(season) DESC, COUNT(*) DESC
+        LIMIT 1
+        """
+        df = self._query(sql, (home_team,))
+        if not df.empty:
+            return str(df.iloc[0]["park_id"])
+        return None
 
 # ---------------------------------------------------------------------------
 # Quick demo when run directly

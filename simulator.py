@@ -31,12 +31,30 @@ class GameSimulator:
         print("------------------------")
         df_att = self.qa.simulate_attendance(home_team, vis_team, day_of_week, daynight)
         
+
+        #TO DO
+        # Call helper function to retrieve park_id's capacity number if it exist
+        park_id = self.qa.get_park_id(home_team)
+        capacity = self.qa.get_park_capacity(park_id) if park_id else None
+
+
+
         if df_att.empty or pd.isna(df_att.iloc[0]['predicted_attendance']):
             print("  [!] Insufficient historical data to make a prediction.")
         else:
             row = df_att.iloc[0]
+            pred_att = int(row['predicted_attendance'])
+            #TO DO Add new print statement to show Percent full of stadium by dividing attendance by size * 100 if the helper function returned a capacity 
             print(f"  Predicted Attendance: {int(row['predicted_attendance']):,}")
             print(f"  Expected Range:       {int(row['low_estimate']):,} to {int(row['high_estimate']):,}")
+
+            if capacity:
+                pct_full = (pred_att / capacity) * 100
+                if pct_full > 100:
+                    pct_full = 100
+                    
+                print(f"  Stadium Capacity:     {pct_full:.1f}% full ({pred_att:,} / {capacity:,})")
+
             print(f"  Confidence Basis:     {row['match_level']} (n={int(row['sample_size'])})")
 
         # step 2: show how much the weather and day of the week change the attendance

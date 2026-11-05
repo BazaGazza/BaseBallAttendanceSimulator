@@ -29,6 +29,8 @@ CSV_FILES = {
     "games": os.path.join(DATA_DIR, "clean_games.csv"),
     "gametime": os.path.join(DATA_DIR, "clean_gametime.csv"),
     "seatgeek": os.path.join(DATA_DIR, "clean_seatgeek.csv"),
+    "cap": os.path.join(DATA_DIR, "park_capacity.csv"),
+
 }
 
 # ---------------------------------------------------------------------------
@@ -49,6 +51,12 @@ CREATE TABLE IF NOT EXISTS parks (
     league      TEXT,
     notes       TEXT
 );
+
+-- New Addition
+CREATE TABLE IF NOT EXISTS park_capacity ( 
+        park_id VARCHAR(10) PRIMARY KEY,
+        seating_capacity INTEGER NOT NULL
+    );
 
 CREATE TABLE IF NOT EXISTS teams (
     team_id TEXT PRIMARY KEY
@@ -545,6 +553,14 @@ def build_database(db_path: str, force: bool = False) -> None:
         print()
 
     # ------------------------------------------------------------------
+    # dump in the park capacity data
+    # ------------------------------------------------------------------
+    cap_df = _clean_nulls(pd.read_csv(CSV_FILES["cap"]))
+    cap_df.to_sql("park_capacity", conn, if_exists="append", index=False)
+    print(f"  [OK] Loaded {len(cap_df):,} park capacities")
+
+
+    # ------------------------------------------------------------------
     # dump in the seatgeek stuff
     # ------------------------------------------------------------------
     sg_df = pd.read_csv(CSV_FILES["seatgeek"])
@@ -597,7 +613,7 @@ def build_database(db_path: str, force: bool = False) -> None:
     conn.commit()
 
     all_tables = [
-        "parks", "teams", "games",
+        "parks", "park_capacity", "teams", "games",
         "team_lookup", "venue_map",
         "gametime_events", "seatgeek_events",
     ]
