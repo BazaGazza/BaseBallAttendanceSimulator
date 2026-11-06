@@ -1,54 +1,78 @@
 /* Typography */
 body {
-    font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
-    background-color: #272b30;
-    color: #e9ecef;
-    line-height: 1.6;
+    font-family: system-ui, -apple-system, 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+    background-color: var(--cream-white);
+    color: rgb(var(--gray-dark));
+    line-height: 1.7;
+    margin: 0;
+    padding: 0;
 }
 
 h1, h2, h3, h4, h5, h6 {
-    color: #17a2b8;
-    font-weight: 600;
-    margin-bottom: 1rem;
+    font-family: 'Arial Black', Impact, sans-serif;
+    color: rgb(var(--black));
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+    margin: 0 0 1rem 0;
 }
 
 h1 {
     font-size: 2.75rem;
+    color: var(--baseball-red);
+}
+
+h2 {
+    font-size: 2.25rem;
+}
+
+h3 {
+    font-size: 1.75rem;
+}
+
+h4 {
+    font-size: 1.5rem;
 }
 
 h5 {
     font-size: 2.0rem;
-    font-weight: 600;
+    font-weight: 700;
 }
 
-/* Override Bootstrap default text colors for dark theme */
+p {
+    margin-bottom: 1em;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Override Bootstrap default text colors for Baseball Light Theme */
 .text-muted {
-    color: #adb5bd !important;
+    color: #5a6779 !important; /* Muted slate-navy for readable secondary text on cream/white */
 }
 
 .text-success {
-    color: #28a745 !important;
+    color: var(--field-green) !important;
 }
 
 .text-warning {
-    color: #ffc107 !important;
+    color: var(--leather-brown) !important;
 }
 
 .text-blue {
-    color: #17a2b8 !important;
+    color: rgb(var(--navy-blue)) !important;
 }
 
 .text-info {
-    color: #17a2b8 !important;
+    color: rgb(var(--navy-blue)) !important;
 }
 
 .text-primary {
-    color: #20c997 !important;
+    color: var(--baseball-red) !important;
 }
 
 /* Measurement & Baseball-specific text styles */
 .text-orange {
-    color: #ff8c00 !important;
+    color: var(--leather-brown) !important;
 }
 
 .mb-0 {

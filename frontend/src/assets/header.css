@@ -1,22 +1,25 @@
 /* Header Styling */
 .app-header {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    background: linear-gradient(135deg, rgb(var(--navy-blue)) 0%, #1a3a5f 100%);
     height: 100px;
     padding: 0 2rem;
-    border-bottom: 3px solid #17a2b8;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    border-bottom: 3px dashed var(--baseball-red);
+    box-shadow: var(--box-shadow);
     display: flex;
     align-items: center;
     position: relative;
 }
 
 .app-header--title {
+    font-family: 'Arial Black', Impact, sans-serif;
     font-size: 3rem;
     font-weight: 700;
-    background: linear-gradient(90deg, #17a2b8 0%, #20c997 100%);
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #ffffff 0%, var(--cream-white) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    filter: drop-shadow(2px 2px 0px var(--baseball-red));
     margin: 0;
     letter-spacing: 1px;
 }
@@ -25,35 +28,40 @@
 .nav-links {
     display: flex;
     justify-content: flex-start;
-    align-items: left !important;
+    align-items: center !important;
     gap: 2rem;
-    margin: 1rem;
+    margin: 1rem 2rem;
     padding: 1rem 2rem;
-    background: rgba(23, 162, 184, 0.1);
-    border: 2px solid rgba(15, 107, 121, 0.1);
+    background: #ffffff;
+    border: 2px solid rgb(var(--navy-blue));
+    border-radius: 12px;
+    box-shadow: var(--box-shadow);
 }
 
 .nav-link {
-    color: rgb(174, 174, 174);
+    color: rgb(var(--navy-blue));
+    font-family: 'Arial Black', Impact, sans-serif;
+    text-transform: uppercase;
     text-decoration: none;
     font-weight: 600;
     font-size: 1rem;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
     transition: all 0.3s ease;
-    border: 2px solid transparent;
-    background: linear-gradient(25deg, #2d3135 0%, #3e444a 100%);
+    border: 2px solid rgb(var(--navy-blue));
+    background: linear-gradient(25deg, var(--cream-white) 0%, rgb(var(--gray-light)) 100%);
 }
 
 .nav-link:hover {
-    color: white;
-    background: rgba(23, 162, 184, 0.15);
-    border-color: #17a2b8;
+    color: #ffffff;
+    background: linear-gradient(25deg, rgb(var(--navy-blue)) 0%, #1a3a5f 100%);
+    border-color: var(--baseball-red);
     transform: translateY(-2px);
 }
 
 .nav-link--selected {
-    color: white;
-    border-color: #17a2b8 !important;
+    color: #ffffff;
+    background: linear-gradient(25deg, var(--baseball-red) 0%, var(--accent-dark) 100%);
+    border-color: var(--accent-dark) !important;
     transform: translateY(0);
 }
