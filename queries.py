@@ -36,8 +36,8 @@ class AttendanceAnalyzer:
             return pd.read_sql_query(sql, conn, params=params)
 
     def get_valid_teams(self) -> list:
-        """get a list of all valid team ids"""
-        df = self._query("SELECT team_id FROM teams")
+        """get a list of all 30 current MLB team ids"""
+        df = self._query("SELECT team_id FROM team_lookup ORDER BY team_id")
         return df['team_id'].tolist()
 
     # ------------------------------------------------------------------
@@ -243,73 +243,95 @@ class AttendanceAnalyzer:
     # ------------------------------------------------------------------
     # simulator queries
     # ------------------------------------------------------------------
+    # postseason game types stored in the DB
+    POSTSEASON_TYPES = ("divisionseries", "lcs", "worldseries", "wildcard", "playoff")
+
+    def _run_sim_fallback(self, steps: list[tuple[str, tuple, str, int]]) -> pd.DataFrame:
+        """Execute ordered simulation fallback queries and return the first hit."""
+        for where_clause, params, label, min_count in steps:
+            having = f"HAVING COUNT(*) >= {min_count}" if min_count > 0 else ""
+            sql = f"""
+            SELECT
+                COUNT(*) AS sample_size,
+                ROUND(AVG(attendance)) AS predicted_attendance,
+                MIN(attendance) AS low_estimate,
+                MAX(attendance) AS high_estimate,
+                ? AS match_level
+            FROM games
+            WHERE {where_clause}
+              AND attendance IS NOT NULL
+              AND attendance > 0
+              AND season != 2020
+            {having}
+            """
+            df = self._query(sql, (label, *params))
+            if not df.empty and pd.notna(df.iloc[0]["predicted_attendance"]):
+                return df
+        return pd.DataFrame()
+
     def simulate_attendance(
-        self, home_team: str, vis_team: str, day_of_week: str, daynight: str
+        self, home_team: str, vis_team: str, day_of_week: str, daynight: str,
+        game_type: str = "regular"
     ) -> pd.DataFrame:
-        """find comparable games to predict attendance"""
-        # start by looking for an exact match
-        sql = """
-        SELECT
-            COUNT(*) AS sample_size,
-            ROUND(AVG(attendance)) AS predicted_attendance,
-            MIN(attendance) AS low_estimate,
-            MAX(attendance) AS high_estimate,
-            'Exact Match' AS match_level
-        FROM games
-        WHERE home_team_id = ? AND vis_team_id = ? 
-          AND day_of_week = ? AND daynight = ?
-          AND gametype = 'regular' AND attendance IS NOT NULL
-        HAVING COUNT(*) >= 3
-        """
-        df = self._query(sql, (home_team, vis_team, day_of_week, daynight))
-        if not df.empty: return df
-        
-        # if no exact match, drop the day/night filter and try again
-        sql = """
-        SELECT
-            COUNT(*) AS sample_size,
-            ROUND(AVG(attendance)) AS predicted_attendance,
-            MIN(attendance) AS low_estimate,
-            MAX(attendance) AS high_estimate,
-            'Matchup + Day of Week' AS match_level
-        FROM games
-        WHERE home_team_id = ? AND vis_team_id = ? 
-          AND day_of_week = ?
-          AND gametype = 'regular' AND attendance IS NOT NULL
-        HAVING COUNT(*) >= 3
-        """
-        df = self._query(sql, (home_team, vis_team, day_of_week))
-        if not df.empty: return df
+        """find comparable games to predict attendance, scoped to the current park
+        and capped at stadium seating capacity.
 
-        # drop the day of week too
-        sql = """
-        SELECT
-            COUNT(*) AS sample_size,
-            ROUND(AVG(attendance)) AS predicted_attendance,
-            MIN(attendance) AS low_estimate,
-            MAX(attendance) AS high_estimate,
-            'Matchup Only' AS match_level
-        FROM games
-        WHERE home_team_id = ? AND vis_team_id = ?
-          AND gametype = 'regular' AND attendance IS NOT NULL
-        HAVING COUNT(*) >= 5
+        game_type: 'regular' or 'postseason'
         """
-        df = self._query(sql, (home_team, vis_team))
-        if not df.empty: return df
+        park_id = self.get_park_id(home_team)
+        capacity = self.get_park_capacity(park_id) if park_id else None
 
-        # if all else fails, just use the home team's average
-        sql = """
-        SELECT
-            COUNT(*) AS sample_size,
-            ROUND(AVG(attendance)) AS predicted_attendance,
-            MIN(attendance) AS low_estimate,
-            MAX(attendance) AS high_estimate,
-            'Team Baseline' AS match_level
-        FROM games
-        WHERE home_team_id = ?
-          AND gametype = 'regular' AND attendance IS NOT NULL
-        """
-        return self._query(sql, (home_team,))
+        if game_type == "postseason":
+            df = self._simulate_postseason(home_team, vis_team, park_id)
+        else:
+            df = self._simulate_regular(home_team, vis_team, day_of_week, daynight, park_id)
+
+        if capacity is not None and not df.empty and pd.notna(df.iloc[0]["predicted_attendance"]):
+            for col in ("predicted_attendance", "low_estimate", "high_estimate"):
+                df[col] = df[col].clip(upper=capacity)
+
+        return df
+
+    def _simulate_regular(
+        self, home_team: str, vis_team: str, day_of_week: str, daynight: str,
+        park_id: str | None = None
+    ) -> pd.DataFrame:
+        """fallback chain for regular-season attendance prediction."""
+        base = "gametype = 'regular'"
+        steps = []
+        if park_id:
+            steps.extend([
+                (f"{base} AND park_id = ? AND home_team_id = ? AND vis_team_id = ? AND day_of_week = ? AND daynight = ?",
+                 (park_id, home_team, vis_team, day_of_week, daynight), "Exact Match", 3),
+                (f"{base} AND park_id = ? AND home_team_id = ? AND vis_team_id = ? AND day_of_week = ?",
+                 (park_id, home_team, vis_team, day_of_week), "Matchup + Day of Week", 3),
+                (f"{base} AND park_id = ? AND home_team_id = ? AND vis_team_id = ?",
+                 (park_id, home_team, vis_team), "Matchup Only", 3),
+                (f"{base} AND park_id = ? AND home_team_id = ?",
+                 (park_id, home_team), "Team Baseline (Current Park)", 5),
+            ])
+        steps.append((f"{base} AND home_team_id = ?", (home_team,), "Team Baseline", 0))
+        return self._run_sim_fallback(steps)
+
+    def _simulate_postseason(
+        self, home_team: str, vis_team: str, park_id: str | None = None
+    ) -> pd.DataFrame:
+        """fallback chain for postseason attendance prediction."""
+        ps_filter = "gametype IN ('divisionseries','lcs','worldseries','wildcard','playoff')"
+        steps = []
+        if park_id:
+            steps.extend([
+                (f"{ps_filter} AND park_id = ? AND home_team_id = ? AND vis_team_id = ?",
+                 (park_id, home_team, vis_team), "Postseason – Exact Matchup", 2),
+                (f"{ps_filter} AND park_id = ? AND home_team_id = ?",
+                 (park_id, home_team), "Postseason – Home Team", 2),
+            ])
+        steps.extend([
+            (f"{ps_filter} AND home_team_id = ?",
+             (home_team,), "Postseason – Home Team (All Parks)", 2),
+            (ps_filter, (), "Postseason – League Average", 0),
+        ])
+        return self._run_sim_fallback(steps)
 
     def factor_impacts(self, home_team: str, day_of_week: str, sky: str = None, precip: str = None, temp: int = None) -> pd.DataFrame:
         """calculate how weather and day of the week change the attendance"""
@@ -322,7 +344,7 @@ class AttendanceAnalyzer:
             factors.append({'Factor': f"Day of Week ({day_of_week})", 'Impact': df_dow.iloc[0]['impact_vs_baseline']})
 
         # figure out the weather impact (if they gave us weather info)
-        if sky and precip and temp:
+        if sky and precip and temp is not None:
             temp_bucket = 'Cold' if temp < 60 else ('Moderate' if temp <= 85 else 'Hot')
             sql_weather = "SELECT impact_vs_baseline FROM v_weather_impact WHERE home_team_id = ? AND sky = ? AND precip = ? AND temp_bucket = ?"
             df_weather = self._query(sql_weather, (home_team, sky, precip, temp_bucket))

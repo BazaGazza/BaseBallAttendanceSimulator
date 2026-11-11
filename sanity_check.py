@@ -28,9 +28,10 @@ def section(title):
     print(f"{'='*60}")
 
 
-def check_matchup(qa, home, vis, dow, daynight):
+def check_matchup(qa, home, vis, dow, daynight, game_type="regular"):
     """Run one simulation and validate the predicted attendance."""
-    section(f"MATCHUP: {vis} at {home}  |  {dow} {daynight}")
+    label = "Post-Season" if game_type == "postseason" else f"{dow} {daynight}"
+    section(f"MATCHUP: {vis} at {home}  |  {label}")
 
     # --- 1. resolve park ---
     park_id = qa.get_park_id(home)
@@ -45,7 +46,7 @@ def check_matchup(qa, home, vis, dow, daynight):
         print(f"{FAIL} No capacity on record for park '{park_id}' -- cannot cap-check")
 
     # --- 2. simulate attendance ---
-    df = qa.simulate_attendance(home, vis, dow, daynight)
+    df = qa.simulate_attendance(home, vis, dow, daynight, game_type=game_type)
 
     if df.empty or pd.isna(df.iloc[0]["predicted_attendance"]):
         print(f"{FAIL} Simulator returned no prediction (insufficient data)")
@@ -64,8 +65,15 @@ def check_matchup(qa, home, vis, dow, daynight):
     print(f"  {'Low estimate':<20}: {lo:,}")
     print(f"  {'High estimate':<20}: {hi:,}")
 
-    # --- 3. cap check ---
+    # --- 3. cap & sanity check ---
     all_ok = True
+    if lo <= 0:
+        print(f"{FAIL} Low estimate ({lo:,}) <= 0")
+        all_ok = False
+    if not (lo <= pred <= hi):
+        print(f"{FAIL} Ordering invalid: {lo:,} <= {pred:,} <= {hi:,}")
+        all_ok = False
+
     if capacity is not None:
         pct = pred / capacity * 100
 
@@ -80,13 +88,60 @@ def check_matchup(qa, home, vis, dow, daynight):
             print(f"{PASS} Predicted attendance is within capacity")
 
         if hi > capacity:
-            print(f"  [WARN] High estimate ({hi:,}) exceeds capacity -- expected for historical max, not a bug")
+            print(f"{FAIL} HIGH ESTIMATE ({hi:,}) > CAPACITY ({capacity:,})  <- BUG!")
+            all_ok = False
         else:
             print(f"{PASS} High estimate is also within capacity")
     else:
         print(f"\n  Capacity Check: SKIPPED (no capacity data)")
+        all_ok = False
 
     return all_ok
+
+
+def check_valid_teams(qa):
+    """Verify only the 30 current MLB teams are accepted (no All-Star/defunct teams)."""
+    section("VALID TEAMS CHECK")
+    teams = qa.get_valid_teams()
+    disallowed = {"ALS", "NLS", "CAL", "FLO", "MON", "OAK"}
+    found_bad = sorted(set(teams) & disallowed)
+    print(f"{INFO} Valid teams count: {len(teams)}")
+    if len(teams) != 30 or found_bad:
+        print(f"{FAIL} Expected 30 current MLB teams; found unexpected: {found_bad}")
+        return False
+    print(f"{PASS} Only the 30 current MLB teams are valid (no ALS/NLS/defunct teams)")
+    return True
+
+
+def check_all_teams_bounds(qa):
+    """Test regular & postseason predictions for all 30 current MLB teams."""
+    section("ALL 30 TEAMS BOUNDS CHECK (REGULAR + POSTSEASON)")
+    teams = qa.get_valid_teams()
+    failures = []
+    for home in teams:
+        vis = "NYA" if home != "NYA" else "BOS"
+        park_id = qa.get_park_id(home)
+        cap = qa.get_park_capacity(park_id) if park_id else None
+        if not cap or cap <= 0:
+            failures.append(f"{home}: missing capacity for park {park_id}")
+            continue
+        for gtype in ("regular", "postseason"):
+            df = qa.simulate_attendance(home, vis, "Saturday", "night", game_type=gtype)
+            if df.empty or pd.isna(df.iloc[0]["predicted_attendance"]):
+                failures.append(f"{home} ({gtype}): no prediction")
+                continue
+            r = df.iloc[0]
+            pred, lo, hi = int(r["predicted_attendance"]), int(r["low_estimate"]), int(r["high_estimate"])
+            if not (0 < lo <= pred <= hi <= cap):
+                failures.append(f"{home} ({gtype}): out of bounds lo={lo}, pred={pred}, hi={hi}, cap={cap}")
+
+    if failures:
+        print(f"{FAIL} {len(failures)} team check(s) failed:")
+        for f in failures:
+            print(f"       - {f}")
+        return False
+    print(f"{PASS} All 30 teams pass regular & postseason bounds (0 < low <= pred <= high <= capacity)")
+    return True
 
 
 def check_capacity_table(qa):
@@ -177,26 +232,32 @@ def main():
     # --- test matchups ---
     test_cases = [
         # classic rivalry: Yankees at Boston
-        ("BOS", "NYA", "Saturday", "day"),
+        ("BOS", "NYA", "Saturday", "day",   "regular"),
         # Dodgers hosting Cubs -- big market showdown
-        ("LAN", "CHN", "Friday",   "night"),
+        ("LAN", "CHN", "Friday",   "night", "regular"),
         # small-market team as home
-        ("PIT", "CIN", "Tuesday",  "night"),
+        ("PIT", "CIN", "Tuesday",  "night", "regular"),
         # Rockies (Coors Field, highest capacity in NL)
-        ("COL", "LAN", "Sunday",   "day"),
-        # Texas Rangers at Globe Life Field (was missing capacity before)
-        ("TEX", "HOU", "Friday",   "night"),
-        # Cleveland (was missing capacity before)
-        ("CLE", "NYA", "Saturday", "night"),
+        ("COL", "LAN", "Sunday",   "day",   "regular"),
+        # Texas Rangers at Globe Life Field (postseason)
+        ("TEX", "BOS", "Saturday", "night", "postseason"),
+        # Cleveland (postseason)
+        ("CLE", "NYA", "Saturday", "night", "postseason"),
+        # Tampa Bay at small temporary park (postseason fallback)
+        ("TBA", "BOS", "Saturday", "night", "postseason"),
     ]
 
-    for home, vis, dow, dn in test_cases:
-        ok = check_matchup(qa, home, vis, dow, dn)
-        results.append((f"{vis} at {home}", ok))
+    for home, vis, dow, dn, gtype in test_cases:
+        ok = check_matchup(qa, home, vis, dow, dn, game_type=gtype)
+        results.append((f"{vis} at {home} ({gtype})", ok))
 
-    # --- table / data checks ---
-    cap_ok   = check_capacity_table(qa)
-    hist_ok  = check_historical_vs_capacity()
+    # --- table / data / invariant checks ---
+    teams_ok  = check_valid_teams(qa)
+    bounds_ok = check_all_teams_bounds(qa)
+    cap_ok    = check_capacity_table(qa)
+    hist_ok   = check_historical_vs_capacity()
+    results.append(("Valid teams list (30 MLB only)", teams_ok))
+    results.append(("All 30 teams capacity & range bounds", bounds_ok))
     results.append(("Park capacity table complete", cap_ok))
     results.append(("Historical attendance vs capacity", hist_ok))
 
