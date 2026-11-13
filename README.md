@@ -1,4 +1,4 @@
-# Baseball Attendance Simulator
+# Baseball Attendance Simulator Version 2
 
 Predict MLB game attendance and secondary-market ticket prices from 35 seasons of game logs, weather, and scheduling data.
 
